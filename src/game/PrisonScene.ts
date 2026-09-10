@@ -1,20 +1,32 @@
 import Phaser from 'phaser'
-import type { Agent } from '../types'
+import { initialAgents } from '../agents'
+import type { Agent, AgentState } from '../types'
 
-export const agents: Agent[] = [
-  { id: 'director', name: 'Nova', role: 'Direktör', department: 'Huvudkontor', color: 0xffc857, state: 'working', task: 'Delar upp dagens mål' },
-  { id: 'content', name: 'Pixel', role: 'Content-agent', department: 'Media', color: 0xff6b6b, state: 'working', task: 'Skriver ett YouTube-manus' },
-  { id: 'marketing', name: 'Milo', role: 'Marketing-agent', department: 'Marknad', color: 0x61c0bf, state: 'idle', task: 'Väntar på nästa kampanj' },
-  { id: 'sales', name: 'Echo', role: 'Sales-agent', department: 'Försäljning', color: 0xb39ddb, state: 'blocked', task: 'Behöver godkännande från dig' },
-]
+const STATE_COLORS: Record<AgentState, number> = {
+  idle: 0xa8aec5,
+  working: 0x68d391,
+  blocked: 0xff8a65,
+  done: 0xf7c948,
+}
 
 type SceneEvents = { onAgentSelected: (agent: Agent) => void }
+
+type AgentSprite = {
+  container: Phaser.GameObjects.Container
+  body: Phaser.GameObjects.Rectangle
+  badge: Phaser.GameObjects.Rectangle
+  badgeText: Phaser.GameObjects.Text
+  baseY: number
+  state: AgentState
+}
 
 export class PrisonScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Rectangle
   private keys!: Record<string, Phaser.Input.Keyboard.Key>
   private eventHandlers: SceneEvents = { onAgentSelected: () => undefined }
-  private agentSprites = new Map<string, Phaser.GameObjects.Container>()
+  private agentSprites = new Map<string, AgentSprite>()
+  private latestAgents: Agent[] = initialAgents
+  private selectedId: string | null = null
 
   constructor() {
     super('PrisonScene')
@@ -24,13 +36,33 @@ export class PrisonScene extends Phaser.Scene {
     this.eventHandlers = handlers
   }
 
+  /** Tar emot agentlistan från React. Säker att anropa innan scenen har skapats. */
+  syncAgents(agents: Agent[]) {
+    this.latestAgents = agents
+    agents.forEach(agent => {
+      const sprite = this.agentSprites.get(agent.id)
+      if (!sprite) return
+      sprite.state = agent.state
+      sprite.badge.setFillStyle(STATE_COLORS[agent.state])
+      sprite.badgeText.setText(agent.state.toUpperCase())
+    })
+  }
+
+  setSelectedAgent(id: string | null) {
+    this.selectedId = id
+    this.agentSprites.forEach((sprite, agentId) => {
+      sprite.body.setStrokeStyle(3, agentId === id ? 0xffffff : 0x282b3a)
+    })
+  }
+
   create() {
     this.cameras.main.setBackgroundColor('#1a1d2b')
     this.drawWorld()
     this.player = this.add.rectangle(520, 470, 22, 28, 0xf4d35e).setStrokeStyle(3, 0x282b3a)
     this.add.text(505, 490, 'DU', { fontFamily: 'monospace', fontSize: '9px', color: '#282b3a', fontStyle: 'bold' })
 
-    agents.forEach((agent, index) => this.createAgent(agent, 255 + (index % 2) * 225, 155 + Math.floor(index / 2) * 220))
+    this.latestAgents.forEach((agent, index) => this.createAgent(agent, 255 + (index % 2) * 225, 155 + Math.floor(index / 2) * 220))
+    this.setSelectedAgent(this.selectedId)
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT') as Record<string, Phaser.Input.Keyboard.Key>
   }
 
@@ -48,8 +80,8 @@ export class PrisonScene extends Phaser.Scene {
     this.player.y = Phaser.Math.Clamp(this.player.y, 45, 515)
 
     this.agentSprites.forEach((sprite, id) => {
-      const wobble = Math.sin(this.time.now / 700 + id.length) * 0.25
-      sprite.y += wobble
+      const amplitude = sprite.state === 'working' ? 4 : 2
+      sprite.container.y = sprite.baseY + Math.sin(this.time.now / 700 + id.length) * amplitude
     })
   }
 
@@ -79,8 +111,12 @@ export class PrisonScene extends Phaser.Scene {
     const body = this.add.rectangle(0, 8, 22, 26, agent.color).setStrokeStyle(3, 0x282b3a)
     const head = this.add.rectangle(0, -12, 18, 17, 0xf5c99b).setStrokeStyle(3, 0x282b3a)
     const name = this.add.text(-30, 28, agent.name, { fontFamily: 'monospace', fontSize: '10px', color: '#171a26', fontStyle: 'bold' })
-    const container = this.add.container(x, y, [body, head, name]).setSize(70, 65).setInteractive()
+    const badge = this.add.rectangle(0, -32, 54, 14, STATE_COLORS[agent.state]).setStrokeStyle(2, 0x282b3a)
+    const badgeText = this.add
+      .text(0, -32, agent.state.toUpperCase(), { fontFamily: 'monospace', fontSize: '8px', color: '#171a26', fontStyle: 'bold' })
+      .setOrigin(0.5)
+    const container = this.add.container(x, y, [body, head, name, badge, badgeText]).setSize(70, 80).setInteractive()
     container.on('pointerdown', () => this.eventHandlers.onAgentSelected(agent))
-    this.agentSprites.set(agent.id, container)
+    this.agentSprites.set(agent.id, { container, body, badge, badgeText, baseY: y, state: agent.state })
   }
 }
