@@ -94,6 +94,12 @@ Development command:
 npm run dev
 ```
 
+Test command:
+
+```bash
+npm test
+```
+
 ## First development milestone
 
 Build a vertical slice where a user can select an agent, assign a task, see the agent status change from idle to working to done, and read the event history. Keep the implementation small, understandable and testable.
@@ -110,6 +116,19 @@ Do not jump directly into fine-tuning models. In the first version, “training�
 - Use small commits with descriptive messages.
 - Run `npm run build` after code changes.
 - Prefer a working vertical slice over speculative architecture.
+
+## Branch strategy (Codex + Claude Code)
+
+Two AI tools work in this repository. To keep them from overwriting each other:
+
+- `main` is the integration branch. It must always build. Do not commit work in progress directly to it.
+- Claude Code works on `claude/<short-topic>` branches.
+- Codex works on `codex/<short-topic>` branches.
+- Pull `main` before starting a new branch, and run `npm run build && npm test` before merging back into it.
+- Only one tool edits a given file at a time. Rough ownership:
+  - Claude Code: `src/game/`, `src/App.tsx`, `src/styles.css` — the pixel world, animations, visuals and UI.
+  - Codex: `src/agents.ts`, `src/taskEngine.ts`, `src/types.ts` — agent model, task system, backend and integrations.
+- Ownership is a default, not a lock. If a change needs a file the other tool owns, say so in the commit message.
 
 ## History handoff
 
